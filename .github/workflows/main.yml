@@ -1,4 +1,4 @@
-name: Build atinout.apk for arm_cortex-a7_neon-vfpv4 (Manual SDK)
+name: Build atinout.apk for arm_cortex-a7_neon-vfpv4
 
 on:
   push:
@@ -8,55 +8,33 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/openwrt/sdk:main-arm_cortex-a7_neon-vfpv4
+      options: --user root
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Siapkan feed atinout
+      - name: Clone dan siapkan feed atinout
         run: |
           git clone --depth=1 https://github.com/4IceG/luci-app-atinout.git
           mkdir -p feed
           cp -r luci-app-atinout/atinout feed/
+          echo "src-link custom $GITHUB_WORKSPACE/feed" >> feeds.conf
 
-      - name: Download dan ekstrak OpenWrt SDK (Snapshot)
-        run: |
-          ARCH="arm_cortex-a7_neon-vfpv4"
-          BASE_URL="https://downloads.openwrt.org/snapshots/targets/${ARCH}"
+      - name: Perbarui feeds
+        run: ./scripts/feeds update -a
 
-          echo "Mencari SDK terbaru untuk ${ARCH}..."
-          # Ambil nama file SDK terbaru dari index halaman
-          SDK_FILE=$(curl -sL "${BASE_URL}/" | grep -oE 'openwrt-sdk-[^"]+\.tar\.xz' | head -1)
+      - name: Instal paket atinout dari feed lokal
+        run: ./scripts/feeds install atinout
 
-          if [ -z "$SDK_FILE" ]; then
-            echo "❌ Gagal menemukan SDK untuk arsitektur ${ARCH}."
-            echo "Pastikan arsitektur tersebut tersedia di snapshot."
-            exit 1
-          fi
-
-          echo "Mengunduh $SDK_FILE ..."
-          curl -LO "${BASE_URL}/${SDK_FILE}"
-
-          echo "Mengekstrak SDK..."
-          tar -xf "$SDK_FILE"
-          # Ganti nama folder SDK menjadi 'sdk' agar mudah dirujuk
-          mv openwrt-sdk-* sdk
-
-      - name: Kompilasi atinout di dalam SDK
-        run: |
-          cd sdk
-          # Tambahkan feed lokal
-          echo "src-link custom ${{ github.workspace }}/feed" >> feeds.conf
-          # Perbarui feed dan instal dependensi
-          ./scripts/feeds update -a
-          ./scripts/feeds install atinout
-          # Kompilasi paket (verbose)
-          make package/atinout/compile V=s
+      - name: Kompilasi atinout
+        run: make package/atinout/compile V=s
 
       - name: Upload atinout.apk
         uses: actions/upload-artifact@v4
         with:
           name: atinout-arm_cortex-a7_neon-vfpv4
-          # Path relatif terhadap root workspace
-          path: sdk/bin/packages/arm_cortex-a7_neon-vfpv4/custom/*.apk
+          path: bin/packages/arm_cortex-a7_neon-vfpv4/custom/*.apk
           if-no-files-found: error
