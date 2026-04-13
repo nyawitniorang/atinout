@@ -1,0 +1,47 @@
+name: Build atinout.apk for EA6350v3 (arm_cortex-a7_neon-vfpv4)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build atinout for arm_cortex-a7_neon-vfpv4
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clone luci-app-atinout repo dan ambil subfolder atinout
+        run: |
+          git clone --depth=1 https://github.com/4IceG/luci-app-atinout.git
+          # Buat feed dir hanya berisi package atinout (bukan luci-app-atinout)
+          mkdir -p feed
+          cp -r luci-app-atinout/atinout feed/
+
+      - name: Build via OpenWrt SDK
+        uses: openwrt/gh-action-sdk@main
+        env:
+          ARCH: arm_cortex-a7_neon-vfpv4-24.10.0
+          FEED_DIR: ${{ github.workspace }}/feed
+          PACKAGES: atinout
+          NO_DEFAULT_FEEDS: 0
+          BUILD_LOG: 1
+
+      - name: Upload atinout.apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: atinout-arm_cortex-a7_neon-vfpv4
+          path: bin/packages/arm_cortex-a7_neon-vfpv4/**/*.apk
+          if-no-files-found: warn
+
+      - name: Upload build logs jika gagal
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: logs/
