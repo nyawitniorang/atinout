@@ -1,0 +1,62 @@
+name: Build atinout for Linksys EA6350v3 (arm_cortex-a7_neon-vfpv4)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build atinout for arm_cortex-a7_neon-vfpv4
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone luci-app-atinout dan siapkan feed
+        run: |
+          git clone --depth=1 https://github.com/4IceG/luci-app-atinout.git
+          mkdir -p feed
+          cp -r luci-app-atinout/atinout feed/
+
+      - name: Patch PKG_MIRROR_HASH di Makefile (jika diperlukan)
+        run: |
+          # Cek apakah PKG_MIRROR_HASH ada di Makefile
+          if grep -q "^PKG_MIRROR_HASH:=" feed/atinout/Makefile; then
+            sed -i 's/^PKG_MIRROR_HASH:=.*/PKG_MIRROR_HASH:=8bcae398a8e1c358b1269190807347af16e6ac8a014aebd8ccfa65f759060024/' feed/atinout/Makefile
+          else
+            # Jika tidak ada, tambahkan setelah PKG_HASH (atau abaikan)
+            echo "PKG_MIRROR_HASH tidak ditemukan, skip patching."
+          fi
+          echo "=== Isi Makefile (bagian hash) ==="
+          grep -E "PKG_HASH|PKG_MIRROR_HASH" feed/atinout/Makefile || true
+
+      - name: Build via OpenWrt SDK
+        uses: openwrt/gh-action-sdk@v6
+        with:
+          arch: arm_cortex-a7_neon-vfpv4
+          # Ganti 'version' di bawah sesuai dengan cabang OpenWrt yang Anda gunakan:
+          # - Untuk rilis stabil terbaru (menghasilkan .ipk), gunakan: version: 24.10.0
+          # - Untuk snapshot/main branch (menghasilkan .apk), gunakan: version: SNAPSHOT
+          version: 24.10.0
+          feed_dir: ${{ github.workspace }}/feed
+          packages: atinout
+          build_log: true
+
+      - name: Upload hasil build (IPK/APK)
+        uses: actions/upload-artifact@v4
+        with:
+          name: atinout-arm_cortex-a7_neon-vfpv4
+          # Path ini akan menangkap file .ipk (default 24.10) atau .apk (snapshot)
+          path: |
+            bin/packages/arm_cortex-a7_neon-vfpv4/**/*.ipk
+            bin/packages/arm_cortex-a7_neon-vfpv4/**/*.apk
+          if-no-files-found: warn
+
+      - name: Upload build logs jika gagal
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: logs/
